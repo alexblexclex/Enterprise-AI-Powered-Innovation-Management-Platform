@@ -1,0 +1,195 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Multi-tenancy models
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Tenant relationships
+  users       User[]
+  ideas       Idea[]
+  features    Feature[]
+  boards      Board[]
+  
+  // Reseller relationship
+  resellerId  String?
+  reseller    Reseller? @relation(fields: [resellerId], references: [id])
+}
+
+model Reseller {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Reseller has many tenants
+  tenants     Tenant[]
+  
+  // Reseller is also a user
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+// User authentication and authorization
+model User {
+  id          String   @id @default(uuid())
+  email       String   
+  password    String
+  firstName   String?
+  lastName    String?
+  role        UserRole @default(USER)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Multi-tenancy - user belongs to a tenant
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // User relationships
+  ideas       Idea[]
+  comments    Comment[]
+  votes       Vote[]
+  
+  // Reseller relationship
+  reseller    Reseller?
+  
+  // Unique constraint for email within a tenant
+  @@unique([email, tenantId])
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  TENANT_ADMIN
+}
+
+// Core idea tracking models
+model Board {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Multi-tenancy - board belongs to a tenant
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // Board relationships
+  ideas       Idea[]
+  features    Feature[]
+}
+
+model Idea {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  status      IdeaStatus @default(NEW)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Multi-tenancy - idea belongs to a tenant
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // Idea relationships
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  boardId     String?
+  board       Board?   @relation(fields: [boardId], references: [id])
+  comments    Comment[]
+  votes       Vote[]
+  features    Feature[]
+}
+
+enum IdeaStatus {
+  NEW
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  IMPLEMENTED
+}
+
+model Feature {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  priority    FeaturePriority @default(MEDIUM)
+  status      FeatureStatus @default(PLANNED)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Multi-tenancy - feature belongs to a tenant
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // Feature relationships
+  boardId     String?
+  board       Board?   @relation(fields: [boardId], references: [id])
+  ideaId      String?
+  idea        Idea?    @relation(fields: [ideaId], references: [id])
+  comments    Comment[]
+}
+
+enum FeaturePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FeatureStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Comment {
+  id          String   @id @default(uuid())
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Comment relationships
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  ideaId      String?
+  idea        Idea?    @relation(fields: [ideaId], references: [id])
+  featureId   String?
+  feature     Feature? @relation(fields: [featureId], references: [id])
+}
+
+model Vote {
+  id          String   @id @default(uuid())
+  type        VoteType
+  createdAt   DateTime @default(now())
+  
+  // Vote relationships
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  ideaId      String
+  idea        Idea     @relation(fields: [ideaId], references: [id])
+  
+  // Each user can only vote once per idea
+  @@unique([userId, ideaId])
+}
+
+enum VoteType {
+  UPVOTE
+  DOWNVOTE
+}
